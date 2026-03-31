@@ -132,6 +132,11 @@ func (o *ExportOptions) Run() error {
 	resources, resourceErrs := resourceToExtract(o.userSpecifiedNamespace, o.labelSelector, dynamicClient, resourceLists, log)
 	clusterScopeHandler := NewClusterScopeHandler()
 	resources = clusterScopeHandler.filterRbacResources(resources, log)
+	if crdResources, crdErr := collectRelatedCRDs(resources, dynamicClient); crdErr != nil {
+		resourceErrs = append(resourceErrs, crdErr)
+	} else if crdResources != nil {
+		resources = append(resources, crdResources)
+	}
 
 	// create cluster resources directory if it needs to be created
 	clusterResourceDir := filepath.Join(o.exportDir, "resources", o.userSpecifiedNamespace, "_cluster")

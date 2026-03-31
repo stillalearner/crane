@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -32,6 +33,12 @@ type groupResource struct {
 type groupResourceError struct {
 	APIResource metav1.APIResource `json:",inline"`
 	Error       error              `json:"error"`
+}
+
+var crdAPIResource = metav1.APIResource{
+	Name:       "customresourcedefinitions",
+	Kind:       "CustomResourceDefinition",
+	Namespaced: false,
 }
 
 // hasClusterScopedManifests reports whether any object in resources would be written
@@ -285,6 +292,89 @@ func isAdmittedResource(gv schema.GroupVersion, resource metav1.APIResource) boo
 		return isClusterScopedResource(gv.Group, resource.Kind)
 	}
 	return true
+}
+
+// deriveCandidateCRDKeys returns unique "<plural>.<group>" keys for namespaced custom
+// resources in the extracted namespace export set.
+func deriveCandidateCRDKeys(resources []*groupResource) map[string]struct{} {
+	keys := map[string]struct{}{}
+	for _, r := range resources {
+		if r == nil || r.APIGroup == "" || !r.APIResource.Namespaced || r.APIResource.Name == "" {
+			continue
+		}
+		keys[r.APIResource.Name+"."+r.APIGroup] = struct{}{}
+	}
+	return keys
+}
+
+// crdLookupFromList builds a "<plural>.<group>" to CRD object map from a CRD list.
+func crdLookupFromList(crds *unstructured.UnstructuredList) map[string]unstructured.Unstructured {
+	lookup := map[string]unstructured.Unstructured{}
+	if crds == nil {
+		return lookup
+	}
+
+	for _, item := range crds.Items {
+		group, _, _ := unstructured.NestedString(item.Object, "spec", "group")
+		plural, _, _ := unstructured.NestedString(item.Object, "spec", "names", "plural")
+		if group == "" || plural == "" {
+			continue
+		}
+		lookup[plural+"."+group] = item
+	}
+	return lookup
+}
+
+// collectRelatedCRDs lists cluster CRDs once and returns only those whose "<plural>.<group>"
+// matches exported namespaced custom resources.
+func collectRelatedCRDs(resources []*groupResource, d dynamic.Interface) (*groupResource, *groupResourceError) {
+	candidateKeys := deriveCandidateCRDKeys(resources)
+	if len(candidateKeys) == 0 {
+		return nil, nil
+	}
+
+	gvr := schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: crdAPIResource.Name,
+	}
+
+	crdList, err := d.Resource(gvr).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, &groupResourceError{
+			APIResource: crdAPIResource,
+			Error:       err,
+		}
+	}
+
+	crdLookup := crdLookupFromList(crdList)
+	if len(crdLookup) == 0 {
+		return nil, nil
+	}
+
+	orderedKeys := make([]string, 0, len(candidateKeys))
+	for k := range candidateKeys {
+		orderedKeys = append(orderedKeys, k)
+	}
+	sort.Strings(orderedKeys)
+
+	matched := []unstructured.Unstructured{}
+	for _, key := range orderedKeys {
+		if crd, ok := crdLookup[key]; ok {
+			matched = append(matched, crd)
+		}
+	}
+	if len(matched) == 0 {
+		return nil, nil
+	}
+
+	return &groupResource{
+		APIGroup:        "apiextensions.k8s.io",
+		APIVersion:      "v1",
+		APIGroupVersion: "apiextensions.k8s.io/v1",
+		APIResource:     crdAPIResource,
+		objects:         &unstructured.UnstructuredList{Items: matched},
+	}, nil
 }
 
 // getObjects lists objects for g using the dynamic client, with paging and optional
