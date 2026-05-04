@@ -135,12 +135,15 @@ var _ = Describe("OLM whiteout", func() {
 
 			DeferCleanup(func() {
 				By("Cleanup OLM resources on source")
-				for _, res := range []string{
-					"subscription olm-whiteout-subscription",
-					"catalogsource olm-whiteout-catalog",
-					"operatorgroup olm-whiteout-og",
+				for _, res := range []struct {
+					kind string
+					name string
+				}{
+					{"subscription", "olm-whiteout-subscription"},
+					{"catalogsource", "olm-whiteout-catalog"},
+					{"operatorgroup", "olm-whiteout-og"},
 				} {
-					_, _ = kubectlSrc.Run("delete", res, "-n", namespace, "--ignore-not-found=true")
+					_, _ = kubectlSrc.Run("delete", res.kind, res.name, "-n", namespace, "--ignore-not-found=true")
 				}
 				By("Cleanup source and target resources")
 				if err := CleanupScenario(paths.TempDir, srcApp, tgtApp); err != nil {
