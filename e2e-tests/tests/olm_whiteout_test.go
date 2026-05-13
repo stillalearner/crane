@@ -276,6 +276,9 @@ var _ = Describe("OLM whiteout", func() {
 			Expect(RunCranePipelineWithChecks(runner, namespace, paths)).NotTo(HaveOccurred())
 			log.Printf("Crane pipeline completed for namespace %s", namespace)
 
+			By("Verify transform stage has whiteout resource files for OLM kinds")
+			Expect(utils.AssertWhiteoutResourceFilesExist(paths.TransformDir, []string{"Subscription", "CatalogSource", "OperatorGroup"})).NotTo(HaveOccurred())
+
 			By("Verify output does not contain OLM whiteout kinds")
 			Expect(utils.AssertNoKindsInOutput(paths.OutputDir, olmWhiteoutKinds)).NotTo(HaveOccurred())
 
