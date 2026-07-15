@@ -462,9 +462,9 @@ func (t *TransferPVCCommand) run() error {
 		transfer.PodOptions{
 			NodeName: nodeName,
 			CommandOptions: rsynctransfer.NewDefaultOptionsFrom(
-				verify(t.Verify),
-				restrictedContainers(true),
-				verbose(true),
+				Verify(t.Verify),
+				RestrictedContainers(true),
+				Verbose(true),
 			),
 			ContainerSecurityContext: corev1.SecurityContext{
 				Privileged: &falseBool,
@@ -486,7 +486,7 @@ func (t *TransferPVCCommand) run() error {
 		log.Fatal(err, "failed to create rsync client")
 	}
 
-	err = followClientLogs(
+	err = FollowClientLogs(
 		srcCfg, types.NamespacedName{Name: srcPVC.Name, Namespace: srcPVC.Namespace}, labels, t.ProgressOutput)
 	if err != nil {
 		log.Fatal(err, "error following rsync client logs")
@@ -945,7 +945,7 @@ type LogStreams interface {
 	Close()
 }
 
-func followClientLogs(srcConfig *rest.Config, pvc types.NamespacedName, labels map[string]string, outputFile string) error {
+func FollowClientLogs(srcConfig *rest.Config, pvc types.NamespacedName, labels map[string]string, outputFile string) error {
 	logReader := NewRsyncLogStream(srcConfig, pvc, labels, outputFile)
 	err := logReader.Init()
 	if err != nil {
@@ -1072,10 +1072,10 @@ func (t *TransferPVCCommand) buildDestinationPVC(sourcePVC *corev1.PersistentVol
 	return pvc
 }
 
-// verify enables/disables --checksum option in Rsync
-type verify bool
+// Verify enables/disables --checksum option in Rsync
+type Verify bool
 
-func (v verify) ApplyTo(opts *rsynctransfer.CommandOptions) error {
+func (v Verify) ApplyTo(opts *rsynctransfer.CommandOptions) error {
 	if bool(v) {
 		opts.Extras = append(opts.Extras, "--checksum")
 	} else {
@@ -1091,11 +1091,11 @@ func (v verify) ApplyTo(opts *rsynctransfer.CommandOptions) error {
 	return nil
 }
 
-// restrictedContainers enables/disables Rsync options that
+// RestrictedContainers enables/disables Rsync options that
 // require privileged containers
-type restrictedContainers bool
+type RestrictedContainers bool
 
-func (r restrictedContainers) ApplyTo(opts *rsynctransfer.CommandOptions) error {
+func (r RestrictedContainers) ApplyTo(opts *rsynctransfer.CommandOptions) error {
 	opts.Groups = bool(!r)
 	opts.Owners = bool(!r)
 	opts.DeviceFiles = bool(!r)
@@ -1105,9 +1105,9 @@ func (r restrictedContainers) ApplyTo(opts *rsynctransfer.CommandOptions) error 
 	return nil
 }
 
-type verbose bool
+type Verbose bool
 
-func (i verbose) ApplyTo(opts *rsynctransfer.CommandOptions) error {
+func (i Verbose) ApplyTo(opts *rsynctransfer.CommandOptions) error {
 	opts.Info = []string{
 		"COPY", "DEL", "STATS2", "PROGRESS2", "FLIST2",
 	}

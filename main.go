@@ -6,6 +6,7 @@ import (
 
 	"github.com/konveyor/crane/cmd/apply"
 	"github.com/konveyor/crane/cmd/convert"
+	convert_storage "github.com/konveyor/crane/cmd/convert-storage"
 	export "github.com/konveyor/crane/cmd/export"
 	plugin_manager "github.com/konveyor/crane/cmd/plugin-manager"
 	skopeo_sync_gen "github.com/konveyor/crane/cmd/skopeo-sync-gen"
@@ -35,6 +36,7 @@ func main() {
 	root.AddCommand(plugin_manager.NewPluginManagerCommand(f))
 	root.AddCommand(version.NewVersionCommand(f))
 	root.AddCommand(validate.NewValidateCommand(genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr}, f))
+	root.AddCommand(convert_storage.NewConvertStorageCommand(genericclioptions.IOStreams{In: os.Stdin, Out: os.Stdout, ErrOut: os.Stderr}))
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
