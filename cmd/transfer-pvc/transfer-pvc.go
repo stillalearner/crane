@@ -77,6 +77,11 @@ type Flags struct {
 	Verify             bool
 	RsyncFlags         []string
 	ProgressOutput     string
+
+	// Indirect transfer flags
+	Indirect          bool
+	StorageConfigPath string
+	BandwidthLimit    string
 }
 
 // EndpointFlags defines command line flags specific
@@ -167,6 +172,8 @@ func NewTransferPVCCommand(streams genericclioptions.IOStreams) *cobra.Command {
 	}
 	addFlagsToTransferPVCCommand(&t.Flags, cmd)
 
+	cmd.AddCommand(NewSetupStorageCommand())
+
 	return cmd
 }
 
@@ -185,6 +192,10 @@ func addFlagsToTransferPVCCommand(c *Flags, cmd *cobra.Command) {
 	cmd.Flags().StringVar(&c.Endpoint.IngressClass, "ingress-class", "", "IngressClass to use for the ingress endpoint")
 	cmd.Flags().BoolVar(&c.Verify, "verify", false, "Enable checksum verification")
 	cmd.Flags().StringVar(&c.ProgressOutput, "output", "", "Write data transfer stats to specified output file")
+	cmd.Flags().BoolVar(&c.Indirect, "indirect", false, "Use indirect transfer via object storage (requires --storage-config)")
+	cmd.Flags().StringVar(&c.StorageConfigPath, "storage-config", "", "Path to storage config YAML for indirect transfer")
+	cmd.Flags().StringVar(&c.BandwidthLimit, "bandwidth-limit", "", "Bandwidth limit for indirect transfer (e.g., '10M')")
+
 	cmd.MarkFlagRequired("source-context")
 	cmd.MarkFlagRequired("destination-context")
 	cmd.MarkFlagRequired("pvc-name")
@@ -230,6 +241,13 @@ func (t *TransferPVCCommand) Validate() error {
 		return fmt.Errorf("cannot evaluate destination context")
 	}
 
+	if t.Flags.Indirect {
+		if t.Flags.StorageConfigPath == "" {
+			return fmt.Errorf("--storage-config is required when using --indirect")
+		}
+		return t.PVC.Validate()
+	}
+
 	if t.sourceContext.Cluster == t.destinationContext.Cluster {
 		return fmt.Errorf("both source and destination cluster are the same, this is not support right now, coming soon")
 	}
@@ -248,6 +266,9 @@ func (t *TransferPVCCommand) Validate() error {
 }
 
 func (t *TransferPVCCommand) Run() error {
+	if t.Flags.Indirect {
+		return t.runIndirect()
+	}
 	return t.run()
 }
 
